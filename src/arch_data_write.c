@@ -47,6 +47,13 @@ int main(void) {
     struct pwsc_ans ans = run_pwsc((uint64_t)target);  
 
     // Stats
-    int correct_bits = bit_accuracy_checker(ans.va.va, (uint64_t)target); 
-    fprintf(stderr, "\nRecovered Secret value: 0x%lx\tCorrect bits: %d\tImprovement Over Random: %d\n", ans.va.va, correct_bits, correct_bits - 32);
+    int correct_bits = bit_accuracy_checker(ans.va.va, (uint64_t)target);
+    fprintf(stderr, "\nRecovered Secret Value: 0x%lx\tRecovered VPNs + PO are %lu %lu %lu %lu %lu\n", 
+			(uint64_t) ans.va.va,
+			VPN4_TO_CACHE_LINE(ans.va.va), 
+			VPN3_TO_CACHE_LINE(ans.va.va), 
+			VPN2_TO_CACHE_LINE(ans.va.va), 
+			VPN1_TO_CACHE_LINE(ans.va.va), 
+			PO_TO_CACHE_LINE(ans.va.va));
+    fprintf(stderr, "Correct bits: %d\tImprovement Over Random: %d\n", correct_bits, correct_bits - 32);
 }

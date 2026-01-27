@@ -9,7 +9,7 @@ TESTS_PROGS=$(foreach s,$(TESTS_SRC),$(patsubst tests/%.c,tests_bin/%.out,$(s)))
 
 .PHONY: all clean pwsc_library spectre_pocs tools
 
-all: $(PROGS) $(TESTS_PROGS) spectre_pocs tools
+all: $(PROGS) $(TESTS_PROGS) # spectre_pocs tools
 
 pwsc_library: 
 	make -C pwsc_library 
