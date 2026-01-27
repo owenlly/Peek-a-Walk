@@ -18,3 +18,4 @@ spectre_pocs/main
 pwsc.a
 pwsc_spectre_bhi.a
 spectre_pocs/victim_physmap
+*.asm

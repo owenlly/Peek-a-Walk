@@ -20,7 +20,7 @@ struct orderOracle* new_orderOracle(uint64_t *pwc_evict_sizes, const uint64_t *p
 		order_oracle->size = max(order_oracle->size, cur_level_pwc_entries * stride);
 	}
 
-	if (!(order_oracle->data = mmap(NULL, order_oracle->size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0))) {
+	if (!(order_oracle->data = mmap(NULL, order_oracle->size, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0))) {
 		fprintf(stderr, "Error allocating order oracle memory!\n");
 		goto err_free_cache;
 	}

@@ -54,6 +54,34 @@ void evict_page_caches(struct orderOracle *order_oracle, uint64_t cache_line, ui
 	}
 }
 
+
+// Flush iTLB
+// void evict_page_caches(struct orderOracle *order_oracle, uint64_t cache_line, uint64_t max_level) {
+// 	volatile char *p = order_oracle->data + cache_line * line_size;
+
+// 	/* Optimization do level 0 (TLB) without any fences */ 
+// 	for (uint64_t i = 0; i < order_oracle->pwc_evict_sizes[0]; ++i) {
+// 		*p = 0xC3;
+// 		void (*func_ptr)(void) = (void *)p;
+// 		func_ptr();
+// 		p += pagetable_region_sizes[0]; 
+// 	}
+
+// 	/* Flush the TLBs and page structure caches. */ 
+// 	for (uint64_t level = 1; level <= max_level; ++level) {
+// 		_mm_mfence();
+// 		uint64_t stride = pagetable_region_sizes[level];
+// 		p = order_oracle->data + cache_line * line_size; 
+
+// 		// evict PWCs 
+// 		for (uint64_t i = 0; i < order_oracle->pwc_evict_sizes[level]; ++i) {
+//  			_mm_mfence();
+// 			*p = 0xC3;
+// 			p += stride; 
+// 		}
+// 	}
+// }
+
 /* 
 	Auxillary function for profile_cache. This will record a set of timing measurements 
 	for all line offsets (this is essentially one trial of the profile_cache) measurements. 

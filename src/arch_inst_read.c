@@ -1,0 +1,94 @@
+#include "pwsc.h"
+#include "mapping.h"
+#include "util.h"
+#include <time.h>
+
+// uint64_t setup_trigger(uint64_t target, uint64_t phase, uint64_t __trash) {
+//     (void) phase;
+//     *(uint64_t *)target = 0x5A; 
+//     return __trash; 
+// }
+
+// uint64_t trigger(uint64_t target, uint64_t phase, uint64_t __trash) {
+//     if(phase) *(uint64_t *)target = 0x5A; 
+//     return __trash; 
+// }
+
+__attribute__((section(".secret_section"), used, noinline)) void secret_function(void) {
+    volatile int a = 5;  
+    return;
+}
+
+uint64_t setup_trigger(uint64_t target, uint64_t phase, uint64_t __trash) {
+    (void) phase;
+    // *(uint64_t *)target = 0x5A;
+    uint64_t val = *(uint64_t *)target;
+    asm volatile("" :: "r"(val) : "memory");
+    return __trash; 
+}
+
+uint64_t trigger(uint64_t target, uint64_t phase, uint64_t __trash) {
+    // if(phase) *(uint64_t *)target = 0x5A; 
+    if(phase) {
+        uint64_t val = *(uint64_t *)target;
+        asm volatile("" :: "r"(val) : "memory");
+    }
+    return __trash; 
+}
+
+int main(void) {
+    // pin cpu 
+    pin_cpu(0);
+    srand(time(0)); 
+
+    // Experiment setup
+    fprintf(stderr, "Running simple test\n");  
+    fprintf(stderr, "Using the PWC order oracle\n");
+    fprintf(stderr, "Architectural derefence\n");  
+    fprintf(stderr, "Fast configurations\n");    
+    pwsc_init_reset(setup_trigger, NULL, trigger, DEFAULT_EVICT_SIZES, THRESHOLD_FAST, NUM_TRIALS_FAST); 
+
+    // setup target 
+    // uint64_t *target = mmap(NULL, 4096 * 10, 
+    //             PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE,
+	// 		    -1, 0 );
+    // target += (rand() % 4096); 
+    // *target = 0x5A; 
+
+    uint64_t val = *(uint64_t *)secret_function;
+    printf("Secret function first 8 bytes: 0x%lx\n", val);
+    asm volatile("" :: "r"(val) : "memory");
+
+    // start 
+    // fprintf(stderr, "Target Secret Value: 0x%lx\tTarget's VPNs + PO are %lu %lu %lu %lu %lu\n", 
+	// 		(uint64_t) target,
+	// 		VPN4_TO_CACHE_LINE(target), 
+	// 		VPN3_TO_CACHE_LINE(target), 
+	// 		VPN2_TO_CACHE_LINE(target), 
+	// 		VPN1_TO_CACHE_LINE(target), 
+	// 		PO_TO_CACHE_LINE(target));
+    // fprintf(stderr, "\n\n\n");
+
+    fprintf(stderr, "Target Secret Value: 0x%lx\tTarget's VPNs + PO are %lu %lu %lu %lu %lu\n", 
+			(uint64_t) secret_function,
+			VPN4_TO_CACHE_LINE((uint64_t*) secret_function), 
+			VPN3_TO_CACHE_LINE((uint64_t*) secret_function), 
+			VPN2_TO_CACHE_LINE((uint64_t*) secret_function), 
+			VPN1_TO_CACHE_LINE((uint64_t*) secret_function), 
+			PO_TO_CACHE_LINE((uint64_t*) secret_function));
+    fprintf(stderr, "\n\n\n");
+
+    // Run the PWSC
+    struct pwsc_ans ans = run_pwsc((uint64_t)secret_function);  
+
+    // Stats
+    int correct_bits = bit_accuracy_checker(ans.va.va, (uint64_t)secret_function);
+    fprintf(stderr, "\nRecovered Secret Value: 0x%lx\tRecovered VPNs + PO are %lu %lu %lu %lu %lu\n", 
+			(uint64_t) ans.va.va,
+			VPN4_TO_CACHE_LINE(ans.va.va), 
+			VPN3_TO_CACHE_LINE(ans.va.va), 
+			VPN2_TO_CACHE_LINE(ans.va.va), 
+			VPN1_TO_CACHE_LINE(ans.va.va), 
+			PO_TO_CACHE_LINE(ans.va.va));
+    fprintf(stderr, "Correct bits: %d\tImprovement Over Random: %d\n", correct_bits, correct_bits - 32);
+}

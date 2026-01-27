@@ -1,6 +1,6 @@
 CC=clang
 CFLAGS += -D_GNU_SOURCE -g3 -Wall -Wextra -std=gnu11 -O3 -fPIC
-CFLAGS += -Iinclude -Ipwsc_library/include -no-pie
+CFLAGS += -Iinclude -Ipwsc_library/include -no-pie -Wl,-T,linker.ld -Wl,-no-relax
 
 SRCS=$(wildcard src/*.c)
 PROGS=$(foreach s,$(SRCS),$(patsubst src/%.c,bin/%.out,$(s)))
