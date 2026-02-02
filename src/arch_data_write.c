@@ -17,7 +17,7 @@ uint64_t trigger(uint64_t target, uint64_t phase, uint64_t __trash) {
 
 int main(void) {
   // pin cpu
-  pin_cpu(14);
+  pin_cpu(0);
   srand(time(0));
 
   // Experiment setup
