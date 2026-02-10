@@ -235,9 +235,15 @@ SECTIONS
   .debug_macro    0 : { *(.debug_macro) }
   .debug_addr     0 : { *(.debug_addr) }
   .gnu.attributes 0 : { KEEP (*(.gnu.attributes)) }
+  . = 0x580130;
+  .victim_spy_section : { *(.victim_spy_section) }
 
-  . = 0x5556aa00;
+  . = 0x6056aa00;
   .secret_section : { *(.secret_section) }
+  . = 0x62000000;
+  .noise_section : { *(.noise_section) }
+  . = 0x666abc12;
+  .signal_section : { *(.signal_section) }
 
   /DISCARD/ : { *(.note.GNU-stack) *(.gnu_debuglink) *(.gnu.lto_*) }
 }

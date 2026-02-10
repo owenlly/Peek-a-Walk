@@ -7,14 +7,12 @@
 #include "orderOracle.h"
 
 /* General System Information */
-// #define ncache_lines 	64 						// number
-// of unqiue cache sets indexes
+// #define ncache_lines 	64 // number of unqiue cache sets indexes
 #define table_size 4096                     // page table size in bytes
 #define line_size 64                        // cache line size in bytes
 #define pte_size 8                          // pte size in bytes
 #define pte_per_line (line_size / pte_size) // pte's per cache line
-// #define trials 			128 					// number
-// of trials
+// #define trials 			128 // number of trials
 #define nrounds 10 // measurement rounds
 
 /* Trial number config macros */
@@ -23,7 +21,7 @@
 
 /* threhsold configs */
 #define THRESHOLD_USUAL 55
-#define THRESHOLD_FAST 10
+#define THRESHOLD_FAST 4
 
 /* Functions needed for signal/noise measurements */
 typedef uint64_t (*setup_page_walk_trigger_t)(
@@ -81,3 +79,5 @@ void pwsc_destroy(void);
 
 /* noise filter functions */
 void reset_noise_filter(void);
+
+void set_noise_filter(int *);

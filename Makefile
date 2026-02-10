@@ -18,7 +18,7 @@ pwsc_library:
 
 bin/%.out: src/%.c pwsc_library
 	mkdir -p bin 
-	$(CC) $(CFLAGS) $< bin/pwsc.a -o $@
+	$(CC) $(CFLAGS) $< bin/pwsc.a bin/phr_manipulation.o -o $@
 
 tests_bin/%.out: tests/%.c pwsc_library
 	mkdir -p tests_bin 

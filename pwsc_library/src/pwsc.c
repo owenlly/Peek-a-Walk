@@ -19,10 +19,12 @@ uint64_t trials;
 
 /* Order Oracle Items */
 static uint64_t init_pwc_evict_size[MAX_PAGE_LEVELS] = {
-    1920, 32, 2, 2}; // Orig 1920, 32, 4, 2
+    32, 2, 2, 2}; // Orig 1920, 32, 4, 2
 
 /* Noise Filter Materials */
 uint64_t noise_filter[ncache_lines] = {0};
+
+uint64_t candidate_lines[ncache_lines] = {0};
 
 /*
         evict_page_caches: Uses the current PWC evict size configurations to
@@ -231,6 +233,12 @@ void reset_noise_filter(void) {
     noise_filter[i] = 0;
 }
 
+void set_noise_filter(int *set_filter) {
+  for (int i = 0; i < ncache_lines; i++) {
+    noise_filter[i] = set_filter[i];
+  }
+}
+
 /*
         Get the non buffered page --> this is the cache access
         that is not stored in any page walker cache / TLB. This can either
@@ -291,16 +299,23 @@ struct pwsc_ans run_pwsc(uint64_t target_address) {
 
   /* Allocate Ans */
   size_t ans_idx = 0;
-  uint64_t *ans = malloc(sizeof(uint64_t) * (MAX_PAGE_LEVELS + 1));
+  uint64_t *ans =
+      malloc(sizeof(uint64_t) *
+             (MAX_PAGE_LEVELS + 1)); // Malloc 5 uint64_t locations. The array
+                                     // of 5 page table set indices
   for (uint64_t i = 0; i < MAX_PAGE_LEVELS + 1; i++)
     ans[i] = ncache_lines; // MAX INDEX
 
   /* Record page walk cache information */
-  uint64_t cur_pwc_evict_size[] = {0, 0, 0, 0};
+  uint64_t cur_pwc_evict_size[] = {
+      0, 0, 0,
+      0}; // We change the rate of eviction by modifying the entries in this set
 
   /* Find non buffered cache access */
-  uint64_t non_buffered_line = get_non_buffered_value(target_address);
-  if (non_buffered_line != ncache_lines) {
+  uint64_t non_buffered_line =
+      ncache_lines; // Don't bother with the non-buffered line
+  // get_non_buffered_value(target_address); // Get the last level set
+  if (non_buffered_line != ncache_lines) { // If we found a line, mark it
     ans[ans_idx++] = non_buffered_line;
     fprintf(stderr, "Found a non-buffered line: %lu\n", non_buffered_line);
     noise_filter[non_buffered_line] += 2; // update filter
@@ -314,7 +329,7 @@ struct pwsc_ans run_pwsc(uint64_t target_address) {
     line_tally[i] = 0;
 
   // Rate at which we search
-  uint64_t pl1_base_rate = 256; // default rate
+  uint64_t pl1_base_rate = 2; // default rate
   uint64_t pl1_rate = pl1_base_rate;
   uint64_t plx_base_rate = 2;
   uint64_t plx_rate = plx_base_rate;
@@ -329,6 +344,7 @@ struct pwsc_ans run_pwsc(uint64_t target_address) {
   uint8_t set_pwc_level_size;
   SET_PWC_FLAG;
   for (uint64_t cur_level = 0; cur_level < MAX_PAGE_LEVELS; ++cur_level) {
+    fprintf(stdout, "The current level is %lu\n", cur_level);
 
     // update rate for higher levels
     if (cur_level == 2)
@@ -358,7 +374,8 @@ struct pwsc_ans run_pwsc(uint64_t target_address) {
     // Begin profiling
     _mm_mfence();
     profile_cache(target_address, timings, order_oracle, cur_level);
-    apply_noise_filter(timings);
+    apply_noise_filter(timings); // Basically subtracts the noise filter value
+                                 // for a given cache line
     solve_lines_threshold_gap(&line, timings, trials, solver_gap_threshold);
     uint64_t line_rankings_sorted[ncache_lines];
     uint64_t num_found_lines;
@@ -420,7 +437,8 @@ struct pwsc_ans run_pwsc(uint64_t target_address) {
       */
 
       // exit condition
-      if (num_found_lines > 1 && diff < 15 && ++no_good_answer_cnt >= 20) {
+      if (num_found_lines > 1 && diff < 15 &&
+          ++no_good_answer_cnt >= 20) { // No good answer
         fprintf(stderr, "Unable to solve, killing it and filling in zeros\n");
         for (uint64_t i = 0; i < num_found_lines; i++)
           ans[ans_idx++] = 0;
@@ -429,7 +447,8 @@ struct pwsc_ans run_pwsc(uint64_t target_address) {
       }
 
       // boost to backtracking
-      if (num_found_lines > 1 && ++too_many_lines_stuck_cnt >= 5) {
+      if (num_found_lines > 1 &&
+          ++too_many_lines_stuck_cnt >= 5) { // Too many good lines
         if (cur_level == 1)
           cur_pwc_evict_size[0] =
               (cur_pwc_evict_size[0] < 32 ? 0 : cur_pwc_evict_size[0] - 32);
@@ -453,9 +472,9 @@ struct pwsc_ans run_pwsc(uint64_t target_address) {
       }
 
       // backtracking
-      if (num_found_lines < 2) {
+      if (num_found_lines < 2) { // Maybe we did not find any lines
         if (cur_level == 0)
-          cur_pwc_evict_size[cur_level] += pl1_rate; // increase base
+          cur_pwc_evict_size[cur_level] += pl1_rate; // increase base rate
         else if (cur_level >= 1)
           cur_pwc_evict_size[cur_level] += plx_rate; // update current level
 
