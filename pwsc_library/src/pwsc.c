@@ -313,9 +313,8 @@ struct pwsc_ans run_pwsc(uint64_t target_address) {
 
   /* Find non buffered cache access */
   uint64_t non_buffered_line =
-      ncache_lines; // Don't bother with the non-buffered line
-  // get_non_buffered_value(target_address); // Get the last level set
-  if (non_buffered_line != ncache_lines) { // If we found a line, mark it
+      get_non_buffered_value(target_address); // Get the last level set
+  if (non_buffered_line != ncache_lines) {    // If we found a line, mark it
     ans[ans_idx++] = non_buffered_line;
     fprintf(stderr, "Found a non-buffered line: %lu\n", non_buffered_line);
     noise_filter[non_buffered_line] += 2; // update filter
@@ -396,6 +395,7 @@ struct pwsc_ans run_pwsc(uint64_t target_address) {
 
     /* Noise check + Info output */
     if (line == ncache_lines) {
+      fprintf(stdout, "No good answer found!\n");
 
       /* Test if there literally is no good answer */
       if ((cur_level == 0 && cur_pwc_evict_size[cur_level] >= 4096) ||

