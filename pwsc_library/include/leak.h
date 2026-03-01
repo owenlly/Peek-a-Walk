@@ -34,7 +34,9 @@ struct bit_map *leak_addr_range(uint64_t start_leak, uint64_t end_leak,
 struct pwsc_ans leak_userspace_ptr(uint64_t addr, uint64_t *init_noise_filter,
                                    uint64_t expected_vpn4_line);
 struct pwsc_ans leak_inst_addr(uint64_t addr, uint64_t *init_noise_filter,
-                               uint64_t expected_vpn4_line);
+                               uint64_t expected_vpn4_line,
+                               setup_page_walk_trigger_t setup,
+                               trigger_page_walk_t trigger);
 
 /*
  * Prints the input bitmap as a string to stderr

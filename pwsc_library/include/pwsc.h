@@ -81,3 +81,11 @@ void pwsc_destroy(void);
 void reset_noise_filter(void);
 
 void set_noise_filter(int *);
+
+typedef struct {
+  uint64_t index;
+  uint64_t hits;
+} hit_count;
+
+struct pwsc_ans get_inst_page_set(uint64_t target_address,
+                                  struct pwsc_ans partial_ans);

