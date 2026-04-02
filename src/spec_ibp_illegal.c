@@ -5,7 +5,7 @@
 #include <emmintrin.h>
 #include <time.h>
 
-#define SECRET_VALUE 0x123456789ab
+#define SECRET_VALUE 0x567891234
 
 extern void set_phr(int value);
 extern void shift_phr();
@@ -212,13 +212,14 @@ int main(void) {
   // Run the PWSC
   struct pwsc_ans ans = leak_inst_addr(
       (uint64_t)SECRET_VALUE, init_noise_filter, 0, setup_trigger, trigger);
-#if 0
   ans.va.po_set = 0;
   ans.va.po_co = 0;
   fprintf(stdout,
           "We found the higher bits to be %lx, we must now find the lower 12 "
           "bits\n",
           ans.va.va);
+
+#if 0
 
   int *indexes = generate_indexes(64);
   hit_count hits[64];
@@ -274,8 +275,10 @@ int main(void) {
   qsort(hits, 64, sizeof(hit_count), sort_descending);
   fprintf(stdout, "The index is %lu\n", hits[0].index);
   ans.va.po_set = hits[0].index;
-  ans.va.po_co = 15;
-#endif
+  ans.va.po_co = 0;
+  for (int i = 0; i < ncache_lines; ++i) {
+    fprintf(stdout, "Index - %lu Hits - %lu\n", hits[i].index, hits[i].hits);
+  }
   fprintf(stdout, "The answer is %lx\n", ans.va.va);
 
   // Stats
@@ -294,4 +297,5 @@ int main(void) {
 
   fprintf(stderr, "Correct bits: %d\tImprovement Over Random: %d\n",
           correct_bits, correct_bits - 32);
+#endif
 }
