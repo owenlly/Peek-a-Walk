@@ -19,3 +19,5 @@ pwsc.a
 pwsc_spectre_bhi.a
 spectre_pocs/victim_physmap
 *.asm
+openssl-3.5.0
+compile_commands.json
